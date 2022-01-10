@@ -1,58 +1,29 @@
 void io_hlt(void);
 void io_cli(void);
 void io_out8(int port, int data);
-int io_load_eflags(void);
+int  io_load_eflags(void);
 void io_store_eflags(int eflags);
 
 void init_palette(void);
 void set_palette(int start, int end, unsigned char *rgb);
-void boxfill8(int xsize, unsigned char c, int x0, int y0, int x1, int y1);
+void fillrectangle(int xsize, int x0, int y0, int x1, int y1);
 
-void write_mem8(int addr,int data);
-
-#define COL8_000000		0
-#define COL8_FF0000		1
-#define COL8_00FF00		2
-#define COL8_FFFF00		3
-#define COL8_0000FF		4
-#define COL8_FF00FF		5
-#define COL8_00FFFF		6
-#define COL8_FFFFFF		7
-#define COL8_C6C6C6		8
-#define COL8_840000		9
-#define COL8_008400		10
-#define COL8_848400		11
-#define COL8_000084		12
-#define COL8_840084		13
-#define COL8_008484		14
-#define COL8_848484		15
+typedef struct{
+	unsigned char Red;	       // 颜色的红色部分
+	unsigned char Green;	   // 颜色的绿色部分
+	unsigned char Blue;	       // 颜色的蓝色部分
+} RGB;
 
 void HariMain(void)
 {
-	char *vram;/* 声明变量vram、用于BYTE [...]地址 */
 	int xsize, ysize;
 
-	init_palette();/* 设定调色板 */
+	init_palette(); /* 设定调色板 */
 	xsize = 320;
 	ysize = 200;
 
-	/* 根据 0xa0000 + x + y * 320 计算坐标 8*/
-	boxfill8(xsize, COL8_008484,  0,         0,          xsize -  1, ysize - 29);
-	boxfill8(xsize, COL8_C6C6C6,  0,         ysize - 28, xsize -  1, ysize - 28);
-	boxfill8(xsize, COL8_FFFFFF,  0,         ysize - 27, xsize -  1, ysize - 27);
-	boxfill8(xsize, COL8_C6C6C6,  0,         ysize - 26, xsize -  1, ysize -  1);
-
-	boxfill8(xsize, COL8_FFFFFF,  3,         ysize - 24, 59,         ysize - 24);
-	boxfill8(xsize, COL8_FFFFFF,  2,         ysize - 24,  2,         ysize -  4);
-	boxfill8(xsize, COL8_848484,  3,         ysize -  4, 59,         ysize -  4);
-	boxfill8(xsize, COL8_848484, 59,         ysize - 23, 59,         ysize -  5);
-	boxfill8(xsize, COL8_000000,  2,         ysize -  3, 59,         ysize -  3);
-	boxfill8(xsize, COL8_000000, 60,         ysize - 24, 60,         ysize -  3);
-
-	boxfill8(xsize, COL8_848484, xsize - 47, ysize - 24, xsize -  4, ysize - 24);
-	boxfill8(xsize, COL8_848484, xsize - 47, ysize - 23, xsize - 47, ysize -  4);
-	boxfill8(xsize, COL8_FFFFFF, xsize - 47, ysize -  3, xsize -  4, ysize -  3);
-	boxfill8(xsize, COL8_FFFFFF, xsize -  3, ysize - 24, xsize -  3, ysize -  3);
+	RGB rgb = { 0xff, 0x00, 0x00};
+	setfillcolor(rgb);
 
 	for (;;) {
 		io_hlt();
@@ -61,15 +32,16 @@ void HariMain(void)
 
 void init_palette(void)
 {
+	/* 设置调色盘默认颜色 */
 	static unsigned char table_rgb[16 * 3] = {
-		0x00, 0x00, 0x00,	/*  0:黑 */
-		0xff, 0x00, 0x00,	/*  1:梁红 */
+		0xff, 0xff, 0xff,	/*  0:白 */
+		0xff, 0x00, 0x00,	/*  1:亮红 */
 		0x00, 0xff, 0x00,	/*  2:亮绿 */
 		0xff, 0xff, 0x00,	/*  3:亮黄 */
 		0x00, 0x00, 0xff,	/*  4:亮蓝 */
 		0xff, 0x00, 0xff,	/*  5:亮紫 */
 		0x00, 0xff, 0xff,	/*  6:浅亮蓝 */
-		0xff, 0xff, 0xff,	/*  7:白 */
+		0x00, 0x00, 0x00,	/*  7:白 */
 		0xc6, 0xc6, 0xc6,	/*  8:亮灰 */
 		0x84, 0x00, 0x00,	/*  9:暗红 */
 		0x00, 0x84, 0x00,	/* 10:暗绿 */
@@ -91,9 +63,13 @@ void set_palette(int start, int end, unsigned char *rgb)
 	eflags = io_load_eflags();	/* 记录中断许可标志的值 */
 	io_cli(); 					/* 将中断许可标志置为0,禁止中断 */
 	io_out8(0x03c8, start);
+
+	/* 根据VGA显卡要求，R、G、B三种颜色的值时只能用低6位来指定 */
+	/* 除四操作就是算数右移两位，由于颜色分量为unsigned char，算数右移和逻辑右移是一样的 */
+
 	for (i = start; i <= end; i++) {
 		io_out8(0x03c9, rgb[0] / 4);
-		io_out8(0x03c9, rgb[1] / 4);
+		io_out8(0x03c9, rgb[1] / 4); 
 		io_out8(0x03c9, rgb[2] / 4);
 		rgb += 3;
 	}
@@ -101,13 +77,25 @@ void set_palette(int start, int end, unsigned char *rgb)
 	return;
 }
 
-void boxfill8(int xsize, unsigned char c, int x0, int y0, int x1, int y1)
+void setfillcolor(RGB rgb)
 {
-	char *vram = (char *) 0xa0000; /* 地址变量赋值 */
+	/* 调色盘中的0号颜色就是填充图案中的颜色 默认为黑色*/
+	unsigned char temp_color[3] = { rgb.Red, rgb.Green, rgb.Blue };
+	unsigned char* temp_rgb = temp_color;
+	set_palette(0,0,temp_rgb);
+}
+
+/* 画矩形 */
+void fillrectangle(int xsize, int x0, int y0, int x1, int y1)
+{
+	char *vram = (char *) 0xa0000;    /* 地址变量赋值 */
+
 	int x, y;
+
+	/* 根据 0xa0000 + x + y * 320 计算坐标 8*/
 	for (y = y0; y <= y1; y++) {
 		for (x = x0; x <= x1; x++)
-			vram[y * xsize + x] = c;
+			vram[y * xsize + x] = 0;
 	}
 
 	return;
