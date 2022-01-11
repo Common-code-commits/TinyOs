@@ -2,6 +2,9 @@
 
 #include "bootpack.h"
 
+FIFO8 keyfifo, mousefifo;
+char keybuf[32], mousebuf[128];
+
 void init_pic(void)
 /* PIC初始化 */
 {
@@ -21,21 +24,35 @@ void init_pic(void)
 	io_out8(PIC0_IMR,  0xfb  ); /* 11111011 PIC1以外全部禁止 */
 	io_out8(PIC1_IMR,  0xff  ); /* 11111111 禁止所有中断 */
 
+	fifo8_init(&keyfifo,   32,  keybuf);
+	fifo8_init(&mousefifo, 128, mousebuf);
+	io_out8(PIC0_IMR, 0xf9); /* 开放PIC1和键盘中断(11111001) */
+	io_out8(PIC1_IMR, 0xef); /* 开放鼠标中断(11101111) */
+
+	init_keyboard();
+
 	return;
 }
 
 void inthandler21(int *esp)
 /* 来自PS/2键盘的中断 */
 {
-	fillrectangle(0, 0, 32 * 8 - 1, 15);
-	putfonts8_asc( 0, 0,"INT 21 (IRQ-1) : PS/2 keyboard");	
+	unsigned char data;
+	io_out8(PIC0_OCW2, 0x61);	/* 通知PIC IRQ-01 已经受理完毕 */
+	data = io_in8(PORT_KEYDAT);
+	fifo8_put(&keyfifo, data);
+	return;
 }
 
 void inthandler2c(int *esp)
 /* 来自PS/2鼠标的中断 */
 {
-	fillrectangle(0, 0, 32 * 8 - 1, 15);
-	putfonts8_asc(0, 0,"INT 2C (IRQ-12) : PS/2 mouse");
+	unsigned char data;
+	io_out8(PIC1_OCW2, 0x64);	/* 通知PIC IRQ-12 已经受理完毕 */
+	io_out8(PIC0_OCW2, 0x62);	/* 通知PIC IRQ-02 已经受理完毕 */
+	data = io_in8(PORT_KEYDAT);
+	fifo8_put(&mousefifo, data);
+	return;
 }
 
 void inthandler27(int *esp)
@@ -47,4 +64,24 @@ void inthandler27(int *esp)
 {
 	io_out8(PIC0_OCW2, 0x67); /* 通知PIC的IRQ-07（参考7-1） */
 	return;
+}
+
+int get_keyboard_status(void)
+{
+	return fifo8_status(&keyfifo);
+}
+
+int get_mouse_status(void)
+{
+	return fifo8_status(&mousefifo);
+}
+
+int get_key(void)
+{
+	return fifo8_get(&keyfifo);
+}
+
+int get_mouse(void)
+{
+	return fifo8_get(&mousefifo);
 }

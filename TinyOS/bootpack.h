@@ -3,6 +3,8 @@
    如果存在结构体是被某个魔数地址带来的数据直接赋值，
    该结构体保存为操作系统信息
 */
+#ifndef _BOOKPACK_H
+#define _BOOKPACK_H
 
 typedef struct { /* 0x0ff0-0x0fff */
 	char cyls; /* 启动区读磁盘读到此为止 */
@@ -27,13 +29,20 @@ void load_idtr(int limit, int addr);
 void asm_inthandler21(void);
 void asm_inthandler27(void);
 void asm_inthandler2c(void);
+void io_stihlt(void);
+
 
 /* graphic.c */
 typedef struct{
 	unsigned char Red;	       // 颜色的红色部分
 	unsigned char Green;	   // 颜色的绿色部分
 	unsigned char Blue;	       // 颜色的蓝色部分
-} RGB,*RGBLINK;
+} RGB;
+
+typedef struct{
+	int width;                 
+	int height;                
+} RECT;
 
 #define FILL_COLOR		     7      // 填充默认色号
 #define BORDER_COLOR	     1      // 边框默认色号
@@ -44,19 +53,20 @@ typedef struct{
 
 #define MOUSE_SIZE      16          // 鼠标大小
 
-void init_palette(void);
-void set_palette(int start, int end, unsigned char *rgb);
+#define PALETTE_SIZE  256           // 调色板大小
+#define PALETTE_INIT_SIZE 16        // 调色板初始颜色数量
+
 void set_fill_color(RGB *rgb);
 void fillrectangle( int x0, int y0, int x1, int y1);
 void putfont(int x, int y, char *font);
 void putfonts8_asc(int x, int y,unsigned char *s);
 void init_mouse_cursor(char *mouse);
-void putblock8_8(char *buf);
+void putblock8_8(int px0,int py0,char *buf);
 void init_screen(RGB *rgb);
 void set_border_color(RGB *rgb);
 void set_font_color(RGB *rgb);
 void set_screen_color(RGB *rgb);
-
+RECT* get_screen_src(void);
 /* dsctbl.c */
 
 /* 屏幕信息结构体 */
@@ -90,6 +100,10 @@ void init_pic(void);
 void inthandler21(int *esp);
 void inthandler27(int *esp);
 void inthandler2c(int *esp);
+int get_keyboard_status(void);
+int get_mouse_status(void);
+int get_key(void);
+int get_mouse(void);
 #define PIC0_ICW1		0x0020
 #define PIC0_OCW2		0x0020
 #define PIC0_IMR		0x0021
@@ -102,3 +116,34 @@ void inthandler2c(int *esp);
 #define PIC1_ICW2		0x00a1
 #define PIC1_ICW3		0x00a1
 #define PIC1_ICW4		0x00a1
+
+/* fifo.c */
+typedef struct {
+	unsigned char *buf;
+	int p, q, size, free, flags;
+} FIFO8;
+
+typedef struct {
+	unsigned char buf[3], phase;
+	int x, y, btn;
+} MOUSE_DEC;
+
+void fifo8_init(FIFO8 *fifo, int size, unsigned char *buf);
+int fifo8_put(FIFO8 *fifo, unsigned char data);
+int fifo8_get(FIFO8 *fifo);
+int fifo8_status(FIFO8 *fifo);
+void wait_KBC_sendready(void);
+void enable_mouse(MOUSE_DEC *mdec);
+int mouse_decode(MOUSE_DEC *mdec, unsigned char dat);
+void init_keyboard(void);
+
+#define PORT_KEYDAT				0x0060
+#define PORT_KEYSTA				0x0064
+#define PORT_KEYCMD				0x0064
+#define KEYSTA_SEND_NOTREADY	0x02
+#define KEYCMD_WRITE_MODE		0x60
+#define KBC_MODE				0x47
+#define KEYCMD_SENDTO_MOUSE		0xd4
+#define MOUSECMD_ENABLE			0xf4
+
+#endif
